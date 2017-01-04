@@ -144,8 +144,21 @@ static TCHAR szWindowClass[] = _T("win32app");
 int s_intervalSec = 20 * 60; // 20min
 
 SYSTEMTIME s_time;
-HWND hwndQuitButton, hwndRestartButton, hwndStatusButton;
-HWND hwndCurrentTimeText, hwndTimerText;
+
+enum BUTTONS
+{
+	Parent = 0,
+	Focus,
+	Time,
+	Date,
+	Timer,
+	Reset,
+	Status,
+	Exit,
+	COUNT
+};
+
+HWND ctls[COUNT] = { 0 };
 
 // The string that appears in the application's title bar.
 static TCHAR szTitle[] = _T("Focus");
@@ -239,10 +252,10 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	hInst = hInstance;
 
-	static int w = 220;
+	static int w = 375;
 	static int h = 30;
 
-	HWND hWnd = CreateWindowEx(
+	ctls[Parent] = CreateWindowEx(
 		WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
 		szWindowClass,
 		szTitle,
@@ -255,7 +268,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		NULL
 		);
 
-	if (!hWnd)
+	if (!ctls[Parent])
 	{
 		MessageBox(NULL,
 			_T("Call to CreateWindow failed!"),
@@ -267,84 +280,121 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	int cx = 5;
 
-	hwndRestartButton = CreateWindow(
+	ctls[Focus] = CreateWindow(
+		_T("BUTTON"),  // Predefined class; Unicode assumed 
+		_T("Focus!"),      // Button text 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_FLAT /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		cx,         // x position 
+		5,         // y position 
+		65,        // Button width
+		18,        // Button height
+		ctls[Parent],     // Parent window
+		NULL,       // No menu.
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
+		NULL);      // Pointer not needed.
+	cx += 65 + 5;
+
+	ctls[Time] = CreateWindow(
+		_T("STATIC"),  // Predefined class; Unicode assumed 
+		_T(""),      // Button text 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		cx,         // x position 
+		5,         // y position 
+		80,        // Button width
+		18,        // Button height
+		ctls[Parent],     // Parent window
+		NULL,       // No menu.
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
+		NULL);      // Pointer not needed.
+	cx += 80 + 5;
+
+	ctls[Date] = CreateWindow(
+		_T("STATIC"),  // Predefined class; Unicode assumed 
+		_T(""),      // Button text 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		cx,         // x position 
+		5,         // y position 
+		50,        // Button width
+		18,        // Button height
+		ctls[Parent],     // Parent window
+		NULL,       // No menu.
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
+		NULL);      // Pointer not needed.
+	cx += 50 + 5;
+
+	ctls[Reset] = CreateWindow(
 		_T("BUTTON"),  // Predefined class; Unicode assumed 
 		_T("R"),      // Button text 
-		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_FLAT /*| BS_DEFPUSHBUTTON*/,  // Styles 
 		cx,         // x position 
 		5,         // y position 
 		20,        // Button width
 		18,        // Button height
-		hWnd,     // Parent window
+		ctls[Parent],     // Parent window
 		NULL,       // No menu.
-		(HINSTANCE)(LONG_PTR)GetWindowLong(hWnd, GWLP_HINSTANCE),
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
 		NULL);      // Pointer not needed.
 	cx += 20 + 5;
 
-	hwndStatusButton = CreateWindow(
+	ctls[Status] = CreateWindow(
 		_T("BUTTON"),  // Predefined class; Unicode assumed 
 		_T("S"),      // Button text 
-		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_FLAT /*| BS_DEFPUSHBUTTON*/,  // Styles 
 		cx,         // x position 
 		5,         // y position 
 		20,        // Button width
 		18,        // Button height
-		hWnd,     // Parent window
+		ctls[Parent],     // Parent window
 		NULL,       // No menu.
-		(HINSTANCE)(LONG_PTR)GetWindowLong(hWnd, GWLP_HINSTANCE),
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
 		NULL);      // Pointer not needed.
 	cx += 20 + 5;
 
-	hwndCurrentTimeText = CreateWindow(
+	ctls[Timer] = CreateWindow(
 		_T("STATIC"),  // Predefined class; Unicode assumed 
 		_T(""),      // Button text 
 		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
 		cx,         // x position 
 		5,         // y position 
-		60,        // Button width
+		80,        // Button width
 		18,        // Button height
-		hWnd,     // Parent window
+		ctls[Parent],     // Parent window
 		NULL,       // No menu.
-		(HINSTANCE)(LONG_PTR)GetWindowLong(hWnd, GWLP_HINSTANCE),
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
 		NULL);      // Pointer not needed.
-	cx += 60 + 5;
+	cx += 80 + 5;
 
-	hwndTimerText = CreateWindow(
-		_T("STATIC"),  // Predefined class; Unicode assumed 
-		_T(""),      // Button text 
-		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
-		cx,         // x position 
-		5,         // y position 
-		60,        // Button width
-		18,        // Button height
-		hWnd,     // Parent window
-		NULL,       // No menu.
-		(HINSTANCE)(LONG_PTR)GetWindowLong(hWnd, GWLP_HINSTANCE),
-		NULL);      // Pointer not needed.
-	cx += 60 + 5;
-
-	hwndQuitButton = CreateWindow(
+	ctls[Exit] = CreateWindow(
 		_T("BUTTON"),  // Predefined class; Unicode assumed 
 		_T("X"),      // Button text 
-		WS_TABSTOP | WS_VISIBLE | WS_CHILD /*| BS_DEFPUSHBUTTON*/,  // Styles 
+		WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_FLAT /*| BS_DEFPUSHBUTTON*/,  // Styles 
 		w - 20 - 5,         // x position 
 		h - 20 - 5,         // y position 
 		20,        // Button width
 		18,        // Button height
-		hWnd,     // Parent window
+		ctls[Parent],     // Parent window
 		NULL,       // No menu.
-		(HINSTANCE)(LONG_PTR)GetWindowLong(hWnd, GWLP_HINSTANCE),
+		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
 		NULL);      // Pointer not needed.
 
+	HFONT hFont = CreateFont(20, 0, 0, 0, 700, 0, 0, 0, DEFAULT_CHARSET,
+		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, _T("Courier New"));
+	if (hFont)
+	{
+		for (UINT i = 0; i < COUNT; ++i)
+		{
+			SendMessage(ctls[i], WM_SETFONT, (WPARAM)hFont, 0);
+		}
+	}
 
 	// The parameters to ShowWindow explained:
 	// hWnd: the value returned from CreateWindow
 	// nCmdShow: the fourth parameter from WinMain
-	ShowWindow(hWnd,
+	ShowWindow(ctls[Parent],
 		nCmdShow);
-	UpdateWindow(hWnd);
+	UpdateWindow(ctls[Parent]);
 
-	SetTimer(hWnd, (UINT_PTR)NULL, 1000, NULL);
+	SetTimer(ctls[Parent], (UINT_PTR)NULL, 1000, NULL);
 
 	// Main message loop:
 	MSG msg;
@@ -353,6 +403,8 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
+
+	DeleteObject(hFont);
 
 	return (int)msg.wParam;
 }
@@ -385,8 +437,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		SYSTEMTIME t;
 		GetLocalTime(&t);
 		static TCHAR b[256];
-		GetTimeFormat(LOCALE_SYSTEM_DEFAULT, TIME_FORCE24HOURFORMAT, &t, L"HH':'mm':'ss", b, 256);
-		SendMessage(hwndCurrentTimeText, WM_SETTEXT, 0, (LPARAM)b);
+		_stprintf_s(b, 256, _T("%02d:%02d:%02d"), t.wHour, t.wMinute, t.wSecond);
+		SendMessage(ctls[Time], WM_SETTEXT, 0, (LPARAM)b);
+
+		static TCHAR c[256];
+		_stprintf_s(c, 256, _T("%02d/%02d"), t.wDay, t.wMonth);
+		SendMessage(ctls[Date], WM_SETTEXT, 0, (LPARAM)c);
 
 		// diff time
 		SYSTEMTIME s = diffTimes(&s_time, &t);
@@ -395,9 +451,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			GetLocalTime(&s_time);
 			addSec(&s_time, s_intervalSec);
 		}
-		static TCHAR c[256];
-		GetTimeFormat(LOCALE_SYSTEM_DEFAULT, TIME_FORCE24HOURFORMAT, &s, L"HH':'mm':'ss", c, 256);
-		SendMessage(hwndTimerText, WM_SETTEXT, 0, (LPARAM)c);
+		static TCHAR d[256];
+		_stprintf_s(d, 256, _T("%02d:%02d:%02d"), s.wHour, s.wMinute, s.wSecond);
+		SendMessage(ctls[Timer], WM_SETTEXT, 0, (LPARAM)d);
 
 		EndPaint(hWnd, &ps);
 		break;
@@ -406,14 +462,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_COMMAND:
-		if (lParam == (LPARAM)hwndQuitButton) {
+		if (lParam == (LPARAM)ctls[Exit]) {
 			SendMessage(hWnd, WM_DESTROY, 0, 0);
 		}
-		else if (lParam == (LPARAM)hwndRestartButton) {
+		else if (lParam == (LPARAM)ctls[Reset]) {
 			GetLocalTime(&s_time);
 			addSec(&s_time, s_intervalSec);
 		}
-		else if (lParam == (LPARAM)hwndStatusButton) {
+		else if (lParam == (LPARAM)ctls[Status]) {
 			PrintFocusData();
 			// write stats file
 			// open it with notepad
