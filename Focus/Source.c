@@ -1,12 +1,47 @@
-// GT_HelloWorldWin32.cpp
-// compile with: /D_UNICODE /DUNICODE /DWIN32 /D_WINDOWS /c
-
 #include <windows.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tchar.h>
 
-unsigned long int FNV_hash(const void* dataToHash, size_t length)
+//////////////////////////////////////////////// Global variables
+
+// The main window class name.
+static TCHAR szWindowClass[] = _T("win32app");
+
+static int s_intervalSec = 20 * 60; // 20min
+//static int s_intervalSec = 10; // 20min
+
+static SYSTEMTIME s_time;
+
+static double s_ratio; // 0..1 in the interval
+
+enum BUTTONS
+{
+	Parent = 0,
+	Focus,
+	Time,
+	Date,
+	Timer,
+	Reset,
+	Status,
+	Exit,
+	COUNT
+};
+
+HWND ctls[COUNT] = { 0 };
+
+// The string that appears in the application's title bar.
+static TCHAR szTitle[] = _T("Focus");
+
+HINSTANCE hInst = NULL;
+HFONT hFont = NULL;
+HBRUSH hBrushBackground = NULL;
+HBRUSH hBrushForeground = NULL;
+
+
+///////////////////////////////////////////////// Hash
+
+static unsigned long int FNV_hash(const void* dataToHash, size_t length)
 {
 	const unsigned char* p = (const unsigned char *)dataToHash;
 	unsigned long int h = 2166136261UL;
@@ -31,13 +66,13 @@ struct HashMap
 	unsigned int arrSize;
 };
 
-void HashMap_Init(struct HashMap* p)
+static void HashMap_Init(struct HashMap* p)
 {
 	p->arr = NULL;
 	p->arrSize = 0;
 }
 
-void HashMap_Add(struct HashMap* p, LPCTSTR key, void* data)
+static void HashMap_Add(struct HashMap* p, LPCTSTR key, void* data)
 {
 	p->arrSize += 1;
 	p->arr = (struct HashMapData*)realloc(p->arr, p->arrSize * sizeof(struct HashMapData));
@@ -46,11 +81,11 @@ void HashMap_Add(struct HashMap* p, LPCTSTR key, void* data)
 	p->arr[p->arrSize - 1].data = data;
 }
 
-void HashMap_Remove(struct HashMap* p, LPCTSTR key)
+static void HashMap_Remove(struct HashMap* p, LPCTSTR key)
 {
 }
 
-void* HashMap_Find(struct HashMap* p, LPCTSTR key)
+static void* HashMap_Find(struct HashMap* p, LPCTSTR key)
 {
 	unsigned long hashKey = FNV_hash((void*)key, _tcslen(key));
 	for (UINT i = 0; i < p->arrSize; ++i)
@@ -70,7 +105,65 @@ struct FocusData
 	LPTSTR title;
 };
 
-void UpdateFocusData()
+/////////////////////////////////////////////////////// Helpers
+
+static ULONGLONG MilisFromSysTime(const SYSTEMTIME* t)
+{
+	FILETIME ft;
+	ULARGE_INTEGER li;
+	SystemTimeToFileTime(t, &ft);
+	li.LowPart = ft.dwLowDateTime;
+	li.HighPart = ft.dwHighDateTime;
+	return li.QuadPart / 10 / 1000;
+}
+
+static SYSTEMTIME SysTimeFromMilis(ULONGLONG m)
+{
+	SYSTEMTIME t;
+	FILETIME ft;
+	ULARGE_INTEGER li;
+	li.QuadPart = m * 10 * 1000;
+	ft.dwLowDateTime = li.LowPart;
+	ft.dwHighDateTime = li.HighPart;
+	FileTimeToSystemTime(&ft, &t);
+	return t;
+}
+
+static SYSTEMTIME diffTimes(const SYSTEMTIME* pSr, const SYSTEMTIME* pSl)
+{
+	LONGLONG diff = (LONGLONG)MilisFromSysTime(pSr) - (LONGLONG)MilisFromSysTime(pSl);
+	SYSTEMTIME t = SysTimeFromMilis((ULONGLONG)diff);
+	if (diff < 0)
+		t.wYear = 1000;
+	return t;
+}
+
+static void UpdateRatio(const SYSTEMTIME* pS)
+{
+	if (pS->wYear != 1000)
+	{
+		double s = (double)MilisFromSysTime(pS) / 1000.0;
+		s_ratio = (double)s / s_intervalSec;
+	}
+	else
+	{
+		s_ratio = 1.0;
+	}
+}
+
+// max 1 day add
+static void addSec(SYSTEMTIME* p, int sec)
+{
+	p->wSecond += sec;
+	int m = p->wSecond / 60;
+	p->wSecond -= m * 60;
+	p->wMinute += m;
+	int h = p->wMinute / 60;
+	p->wMinute -= h * 60;
+	p->wHour += h;
+}
+
+static void UpdateFocusData()
 {
 	HWND hWnd = GetForegroundWindow();
 
@@ -96,8 +189,33 @@ void UpdateFocusData()
 	}
 }
 
+static void UpdateControls()
+{
+	SYSTEMTIME t;
+	GetLocalTime(&t);
+	static TCHAR b[256];
+	_stprintf_s(b, 256, _T("%02d:%02d:%02d"), t.wHour, t.wMinute, t.wSecond);
+	SendMessage(ctls[Time], WM_SETTEXT, 0, (LPARAM)b);
+
+	static TCHAR c[256];
+	_stprintf_s(c, 256, _T("%02d/%02d"), t.wDay, t.wMonth);
+	SendMessage(ctls[Date], WM_SETTEXT, 0, (LPARAM)c);
+
+	// diff time
+	SYSTEMTIME s = diffTimes(&s_time, &t);
+	UpdateRatio(&s);
+	if (s.wYear == 1000) // overflow
+	{
+		GetLocalTime(&s_time);
+		addSec(&s_time, s_intervalSec);
+	}
+	static TCHAR d[256];
+	_stprintf_s(d, 256, _T("%02d:%02d:%02d"), s.wHour, s.wMinute, s.wSecond);
+	SendMessage(ctls[Timer], WM_SETTEXT, 0, (LPARAM)d);
+}
+
 #define BUFSIZE 1024
-void PrintFocusData()
+static void PrintFocusData()
 {
 	HANDLE hTempFile = INVALID_HANDLE_VALUE;
 	TCHAR lpTempPathBuffer[MAX_PATH];
@@ -136,122 +254,8 @@ void PrintFocusData()
 	ShellExecute(0, _T("open"), szTempFileName, NULL, NULL, SW_SHOW);
 }
 
-// Global variables
-
-// The main window class name.
-static TCHAR szWindowClass[] = _T("win32app");
-
-int s_intervalSec = 20 * 60; // 20min
-
-SYSTEMTIME s_time;
-
-enum BUTTONS
+static void CreateControls()
 {
-	Parent = 0,
-	Focus,
-	Time,
-	Date,
-	Timer,
-	Reset,
-	Status,
-	Exit,
-	COUNT
-};
-
-HWND ctls[COUNT] = { 0 };
-
-// The string that appears in the application's title bar.
-static TCHAR szTitle[] = _T("Focus");
-
-HINSTANCE hInst;
-
-// max 1 day add
-void addSec(SYSTEMTIME* p, int sec)
-{
-	p->wSecond += sec;
-	int m = p->wSecond / 60;
-	p->wSecond -= m * 60;
-	p->wMinute += m;
-	int h = p->wMinute / 60;
-	p->wMinute -= h * 60;
-	p->wHour += h;
-}
-
-SYSTEMTIME diffTimes(const SYSTEMTIME* pSr, const SYSTEMTIME* pSl)
-{
-	SYSTEMTIME t_res;
-	FILETIME v_ftime;
-	ULARGE_INTEGER v_ui;
-	__int64 v_right, v_left, v_res;
-	SystemTimeToFileTime(pSr, &v_ftime);
-	v_ui.LowPart = v_ftime.dwLowDateTime;
-	v_ui.HighPart = v_ftime.dwHighDateTime;
-	v_right = v_ui.QuadPart;
-
-	SystemTimeToFileTime(pSl, &v_ftime);
-	v_ui.LowPart = v_ftime.dwLowDateTime;
-	v_ui.HighPart = v_ftime.dwHighDateTime;
-	v_left = v_ui.QuadPart;
-
-	v_res = v_right - v_left;
-
-	v_ui.QuadPart = v_res;
-	v_ftime.dwLowDateTime = v_ui.LowPart;
-	v_ftime.dwHighDateTime = v_ui.HighPart;
-	FileTimeToSystemTime(&v_ftime, &t_res);
-
-	if (v_res < 0)
-	{
-		t_res.wYear = 1000;
-		t_res.wHour = 0;
-		t_res.wMinute = 0;
-		t_res.wSecond = 0;
-		t_res.wMilliseconds = 0;
-	}
-
-	return t_res;
-}
-
-
-// Forward declarations of functions included in this code module:
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-
-int WINAPI WinMain(HINSTANCE hInstance,
-	HINSTANCE hPrevInstance,
-	LPSTR lpCmdLine,
-	int nCmdShow)
-{
-	HashMap_Init(&s_HashMap);
-
-	GetLocalTime(&s_time);
-
-	WNDCLASSEX wcex;
-
-	wcex.cbSize = sizeof(WNDCLASSEX);
-	wcex.style = CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc = WndProc;
-	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = 0;
-	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
-	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wcex.lpszMenuName = NULL;
-	wcex.lpszClassName = szWindowClass;
-	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
-
-	if (!RegisterClassEx(&wcex))
-	{
-		MessageBox(NULL,
-			_T("Call to RegisterClassEx failed!"),
-			_T("Win32 Guided Tour"),
-			MB_OK);
-
-		return 1;
-	}
-
-	hInst = hInstance;
-
 	static int w = 375;
 	static int h = 30;
 
@@ -259,14 +263,14 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
 		szWindowClass,
 		szTitle,
-		WS_BORDER|WS_POPUP, //WS_POPUPWINDOW, //WS_OVERLAPPEDWINDOW,
+		WS_BORDER | WS_POPUP, //WS_POPUPWINDOW, //WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		w, h,
 		NULL,
 		NULL,
-		hInstance,
+		hInst,
 		NULL
-		);
+	);
 
 	if (!ctls[Parent])
 	{
@@ -275,7 +279,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 			_T("Win32 Guided Tour"),
 			MB_OK);
 
-		return 1;
+		exit(1);
 	}
 
 	int cx = 5;
@@ -377,7 +381,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		(HINSTANCE)(LONG_PTR)GetWindowLong(ctls[Parent], GWLP_HINSTANCE),
 		NULL);      // Pointer not needed.
 
-	HFONT hFont = CreateFont(20, 0, 0, 0, 700, 0, 0, 0, DEFAULT_CHARSET,
+	hFont = CreateFont(20, 0, 0, 0, 700, 0, 0, 0, DEFAULT_CHARSET,
 		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, _T("Courier New"));
 	if (hFont)
 	{
@@ -386,28 +390,11 @@ int WINAPI WinMain(HINSTANCE hInstance,
 			SendMessage(ctls[i], WM_SETFONT, (WPARAM)hFont, 0);
 		}
 	}
-
-	// The parameters to ShowWindow explained:
-	// hWnd: the value returned from CreateWindow
-	// nCmdShow: the fourth parameter from WinMain
-	ShowWindow(ctls[Parent],
-		nCmdShow);
-	UpdateWindow(ctls[Parent]);
-
-	SetTimer(ctls[Parent], (UINT_PTR)NULL, 1000, NULL);
-
-	// Main message loop:
-	MSG msg;
-	while (GetMessage(&msg, NULL, 0, 0))
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
-
-	DeleteObject(hFont);
-
-	return (int)msg.wParam;
+	hBrushForeground = CreateSolidBrush(RGB(234, 123, 86));
+	hBrushBackground = CreateSolidBrush(RGB(0, 0, 0));
 }
+
+//////////////////////////////////////////////////// core stuff
 
 //
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -422,7 +409,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	PAINTSTRUCT ps;
 	HDC hdc;
-	TCHAR greeting[] = _T("Hello, World!");
 
 	switch (message)
 	{
@@ -433,28 +419,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
-		
-		SYSTEMTIME t;
-		GetLocalTime(&t);
-		static TCHAR b[256];
-		_stprintf_s(b, 256, _T("%02d:%02d:%02d"), t.wHour, t.wMinute, t.wSecond);
-		SendMessage(ctls[Time], WM_SETTEXT, 0, (LPARAM)b);
-
-		static TCHAR c[256];
-		_stprintf_s(c, 256, _T("%02d/%02d"), t.wDay, t.wMonth);
-		SendMessage(ctls[Date], WM_SETTEXT, 0, (LPARAM)c);
-
-		// diff time
-		SYSTEMTIME s = diffTimes(&s_time, &t);
-		if (s.wYear == 1000) // overflow
-		{
-			GetLocalTime(&s_time);
-			addSec(&s_time, s_intervalSec);
-		}
-		static TCHAR d[256];
-		_stprintf_s(d, 256, _T("%02d:%02d:%02d"), s.wHour, s.wMinute, s.wSecond);
-		SendMessage(ctls[Timer], WM_SETTEXT, 0, (LPARAM)d);
-
+		UpdateControls();
+		RECT r;
+		GetClientRect(hWnd, &r);
+		FillRect(hdc, &r, hBrushBackground);
+		r.right = (LONG)((1.0 - s_ratio) * (double)r.right);
+		FillRect(hdc, &r, hBrushForeground);
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
@@ -479,6 +449,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_TIMER:
 		UpdateFocusData();
 		SendMessage(hWnd, WM_PAINT, 0, 0);
+		RECT z;
+		GetClientRect(hWnd, &z);
+		InvalidateRect(hWnd, &z, TRUE);
 		break;
 
 	default:
@@ -487,4 +460,66 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 
 	return 0;
+}
+
+int WINAPI WinMain(HINSTANCE hInstance,
+	HINSTANCE hPrevInstance,
+	LPSTR lpCmdLine,
+	int nCmdShow)
+{
+	HashMap_Init(&s_HashMap);
+
+	GetLocalTime(&s_time);
+
+	WNDCLASSEX wcex;
+
+	wcex.cbSize = sizeof(WNDCLASSEX);
+	wcex.style = CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc = WndProc;
+	wcex.cbClsExtra = 0;
+	wcex.cbWndExtra = 0;
+	wcex.hInstance = hInstance;
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.lpszMenuName = NULL;
+	wcex.lpszClassName = szWindowClass;
+	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+
+	if (!RegisterClassEx(&wcex))
+	{
+		MessageBox(NULL,
+			_T("Call to RegisterClassEx failed!"),
+			_T("Win32 Guided Tour"),
+			MB_OK);
+
+		return 1;
+	}
+
+	hInst = hInstance;
+
+	CreateControls();
+
+	// The parameters to ShowWindow explained:
+	// hWnd: the value returned from CreateWindow
+	// nCmdShow: the fourth parameter from WinMain
+	ShowWindow(ctls[Parent],
+		nCmdShow);
+	UpdateWindow(ctls[Parent]);
+
+	SetTimer(ctls[Parent], (UINT_PTR)NULL, 1000, NULL);
+
+	// Main message loop:
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	DeleteObject(hFont);
+	DeleteObject(hBrushBackground);
+	DeleteObject(hBrushForeground);
+
+	return (int)msg.wParam;
 }
