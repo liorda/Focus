@@ -30,13 +30,13 @@ enum BUTTONS
 
 HWND ctls[COUNT] = { 0 };
 
-// The string that appears in the application's title bar.
-static TCHAR szTitle[] = _T("Focus");
-
-HINSTANCE hInst = NULL;
 HFONT hFont = NULL;
 HBRUSH hBrushBackground = NULL;
 HBRUSH hBrushForeground = NULL;
+
+///////////////////////////////////////////////// forward decl
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 
 ///////////////////////////////////////////////// Hash
@@ -254,21 +254,46 @@ static void PrintFocusData()
 	ShellExecute(0, _T("open"), szTempFileName, NULL, NULL, SW_SHOW);
 }
 
-static void CreateControls()
+static void CreateControls(HINSTANCE hInstance)
 {
+	WNDCLASSEX wcex;
+
+	wcex.cbSize = sizeof(WNDCLASSEX);
+	wcex.style = CS_HREDRAW | CS_VREDRAW;
+	wcex.lpfnWndProc = WndProc;
+	wcex.cbClsExtra = 0;
+	wcex.cbWndExtra = 0;
+	wcex.hInstance = hInstance;
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.lpszMenuName = NULL;
+	wcex.lpszClassName = szWindowClass;
+	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+
+	if (!RegisterClassEx(&wcex))
+	{
+		MessageBox(NULL,
+			_T("Call to RegisterClassEx failed!"),
+			_T("Win32 Guided Tour"),
+			MB_OK);
+
+		exit(2);
+	}
+	
 	static int w = 375;
 	static int h = 30;
 
 	ctls[Parent] = CreateWindowEx(
 		WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
 		szWindowClass,
-		szTitle,
+		_T("Focus"),
 		WS_BORDER | WS_POPUP, //WS_POPUPWINDOW, //WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		w, h,
 		NULL,
 		NULL,
-		hInst,
+		hInstance,
 		NULL
 	);
 
@@ -396,15 +421,6 @@ static void CreateControls()
 
 //////////////////////////////////////////////////// core stuff
 
-//
-//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
-//
-//  PURPOSE:  Processes messages for the main window.
-//
-//  WM_PAINT    - Paint the main window
-//  WM_DESTROY  - post a quit message and return
-//
-//
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	PAINTSTRUCT ps;
@@ -412,12 +428,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	switch (message)
 	{
-	case WM_NCHITTEST: {
+	case WM_NCHITTEST:
+	{
 		LRESULT hit = DefWindowProc(hWnd, message, wParam, lParam);
 		if (hit == HTCLIENT) hit = HTCAPTION;
 		return hit;
 	}
+	break;
+
 	case WM_PAINT:
+	{
 		hdc = BeginPaint(hWnd, &ps);
 		UpdateControls();
 		RECT r;
@@ -426,12 +446,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		r.right = (LONG)((1.0 - s_ratio) * (double)r.right);
 		FillRect(hdc, &r, hBrushForeground);
 		EndPaint(hWnd, &ps);
-		break;
+	}
+	break;
+
 	case WM_DESTROY:
+	{
 		PostQuitMessage(0);
-		break;
+	}
+	break;
 
 	case WM_COMMAND:
+	{
 		if (lParam == (LPARAM)ctls[Exit]) {
 			SendMessage(hWnd, WM_DESTROY, 0, 0);
 		}
@@ -444,19 +469,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// write stats file
 			// open it with notepad
 		}
-		break;
+	}
+	break;
 
 	case WM_TIMER:
+	{
 		UpdateFocusData();
 		SendMessage(hWnd, WM_PAINT, 0, 0);
 		RECT z;
 		GetClientRect(hWnd, &z);
 		InvalidateRect(hWnd, &z, TRUE);
-		break;
+	}
+	break;
 
 	default:
+	{
 		return DefWindowProc(hWnd, message, wParam, lParam);
-		break;
+	}
+	break;
+
 	}
 
 	return 0;
@@ -471,34 +502,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	GetLocalTime(&s_time);
 
-	WNDCLASSEX wcex;
-
-	wcex.cbSize = sizeof(WNDCLASSEX);
-	wcex.style = CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc = WndProc;
-	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = 0;
-	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
-	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wcex.lpszMenuName = NULL;
-	wcex.lpszClassName = szWindowClass;
-	wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
-
-	if (!RegisterClassEx(&wcex))
-	{
-		MessageBox(NULL,
-			_T("Call to RegisterClassEx failed!"),
-			_T("Win32 Guided Tour"),
-			MB_OK);
-
-		return 1;
-	}
-
-	hInst = hInstance;
-
-	CreateControls();
+	CreateControls(hInstance);
 
 	// The parameters to ShowWindow explained:
 	// hWnd: the value returned from CreateWindow
