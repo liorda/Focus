@@ -8,8 +8,8 @@
 // The main window class name.
 static TCHAR szWindowClass[] = _T("win32app");
 
-static int s_intervalSec = 20 * 60; // 20min
-//static int s_intervalSec = 10; // 20min
+//static int s_intervalSec = 20 * 60; // 20min
+static int s_intervalSec = 10; // 20min
 
 static SYSTEMTIME s_time;
 
@@ -105,13 +105,42 @@ static void* HashMap_Find(struct HashMap* p, LPCTSTR key)
 	return NULL;
 }
 
-struct HashMap s_HashMap;
+static struct HashMap s_HashMap;
 
 struct FocusData
 {
 	size_t timeSpend;
 	LPTSTR title;
 };
+
+/////////////////////////////////////////////////////// named intervals
+
+struct array_t
+{
+	void** data;
+	size_t size;
+	size_t allocated;
+};
+
+static void list_Init(struct array_t* v)
+{
+	v->data = (void**)malloc(10 * sizeof(void*));
+	v->size = 0;
+	v->allocated = 10;
+}
+
+static void list_Add(struct array_t* v, void* data)
+{
+	if (v->size == v->allocated)
+	{
+		v->data = (void**)realloc(v->data, v->size + 10 * sizeof(void*));
+		v->allocated = v->size + 10;
+	}
+	v->data[v->size] = data;
+	v->size++;
+}
+
+static struct array_t s_NamedIntervals;
 
 /////////////////////////////////////////////////////// Helpers
 
@@ -197,6 +226,16 @@ static void UpdateFocusData()
 	}
 }
 
+static void StartNewInterval()
+{
+	GetLocalTime(&s_time);
+	addSec(&s_time, s_intervalSec);
+	static i = 0;
+	char* v = (char*)malloc(10);
+	(void*)_itoa_s(i++, v, 10, 10);
+	list_Add(&s_NamedIntervals, v);
+}
+
 static void UpdateControls()
 {
 	SYSTEMTIME t;
@@ -214,8 +253,7 @@ static void UpdateControls()
 	UpdateRatio(&s);
 	if (s.wYear == 1000) // overflow
 	{
-		GetLocalTime(&s_time);
-		addSec(&s_time, s_intervalSec);
+		StartNewInterval();
 	}
 	static TCHAR d[256];
 	_stprintf_s(d, 256, _T("%02d:%02d:%02d"), s.wHour, s.wMinute, s.wSecond);
@@ -480,8 +518,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SendMessage(hWnd, WM_DESTROY, 0, 0);
 		}
 		else if (lParam == (LPARAM)ctls[Reset]) {
-			GetLocalTime(&s_time);
-			addSec(&s_time, s_intervalSec);
+			StartNewInterval();
 		}
 		else if (lParam == (LPARAM)ctls[Status]) {
 			PrintFocusData();
