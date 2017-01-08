@@ -25,14 +25,22 @@ enum BUTTONS
 	Reset,
 	Status,
 	Exit,
-	COUNT
+	BUTTONS_COUNT
 };
 
-HWND ctls[COUNT] = { 0 };
+HWND ctls[BUTTONS_COUNT] = { 0 };
 
 HFONT hFont = NULL;
-HBRUSH hBrushBackground = NULL;
-HBRUSH hBrushForeground = NULL;
+
+enum BRUSHES
+{
+	BackgroundRect = 0,
+	ForegroundRect,
+	Text,
+	BRUSHES_COUNT
+};
+COLORREF cols[BRUSHES_COUNT] = { RGB(0, 0, 0), RGB(234, 123, 86), RGB(127, 255, 127) };
+HBRUSH brshs[BRUSHES_COUNT] = { 0 };
 
 ///////////////////////////////////////////////// forward decl
 
@@ -275,7 +283,7 @@ static void CreateControls(HINSTANCE hInstance)
 	{
 		MessageBox(NULL,
 			_T("Call to RegisterClassEx failed!"),
-			_T("Win32 Guided Tour"),
+			_T("Focus"),
 			MB_OK);
 
 		exit(2);
@@ -410,13 +418,13 @@ static void CreateControls(HINSTANCE hInstance)
 		OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, _T("Courier New"));
 	if (hFont)
 	{
-		for (UINT i = 0; i < COUNT; ++i)
+		for (UINT i = 0; i < BUTTONS_COUNT; ++i)
 		{
 			SendMessage(ctls[i], WM_SETFONT, (WPARAM)hFont, 0);
 		}
 	}
-	hBrushForeground = CreateSolidBrush(RGB(234, 123, 86));
-	hBrushBackground = CreateSolidBrush(RGB(0, 0, 0));
+	for (UINT i=0; i<BRUSHES_COUNT; ++i)
+		brshs[i] = CreateSolidBrush(cols[i]);
 }
 
 //////////////////////////////////////////////////// core stuff
@@ -442,10 +450,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		UpdateControls();
 		RECT r;
 		GetClientRect(hWnd, &r);
-		FillRect(hdc, &r, hBrushBackground);
+		FillRect(hdc, &r, brshs[BackgroundRect]);
 		r.right = (LONG)((1.0 - s_ratio) * (double)r.right);
-		FillRect(hdc, &r, hBrushForeground);
+		FillRect(hdc, &r, brshs[ForegroundRect]);
 		EndPaint(hWnd, &ps);
+	}
+	break;
+
+	case WM_CTLCOLORSTATIC:
+	{
+		HDC hdcStatic = (HDC)wParam;
+		SetBkMode((HDC)wParam, TRANSPARENT);
+		//SetBkMode((HDC)wParam, TRANSPARENT);
+		SetTextColor(hdcStatic, cols[Text]);
+		//SetBkColor(hdcStatic, RGB(0, 0, 0));
+		return (LRESULT)GetStockObject(HOLLOW_BRUSH);
 	}
 	break;
 
@@ -522,8 +541,8 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	}
 
 	DeleteObject(hFont);
-	DeleteObject(hBrushBackground);
-	DeleteObject(hBrushForeground);
+	for (UINT i=0; i<BRUSHES_COUNT; ++i)
+		DeleteObject(brshs[i]);
 
 	return (int)msg.wParam;
 }
