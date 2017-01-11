@@ -122,19 +122,21 @@ struct array_t
 	size_t allocated;
 };
 
+static const size_t kMemChunkSize = 2;
+
 static void list_Init(struct array_t* v)
 {
-	v->data = (void**)malloc(10 * sizeof(void*));
+	v->data = (void**)malloc(kMemChunkSize * sizeof(void*));
 	v->size = 0;
-	v->allocated = 10;
+	v->allocated = kMemChunkSize;
 }
 
 static void list_Add(struct array_t* v, void* data)
 {
 	if (v->size == v->allocated)
 	{
-		v->data = (void**)realloc(v->data, v->size + 10 * sizeof(void*));
-		v->allocated = v->size + 10;
+		v->data = (void**)realloc(v->data, (v->size + kMemChunkSize) * sizeof(void*));
+		v->allocated = v->size + kMemChunkSize;
 	}
 	v->data[v->size] = data;
 	v->size++;
@@ -484,6 +486,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_PAINT:
 	{
+		InvalidateRect(hWnd, NULL, TRUE);
 		hdc = BeginPaint(hWnd, &ps);
 		UpdateControls();
 		RECT r;
@@ -519,6 +522,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		else if (lParam == (LPARAM)ctls[Reset]) {
 			StartNewInterval();
+			SendMessage(hWnd, WM_TIMER, NULL, NULL);
+			//SendMessage(hWnd, WM_COMMAND, 0, (LPARAM)ctls[Status]);
+			//InvalidateRect(hWnd, NULL, TRUE);
+			//UpdateWindow(hWnd);
 		}
 		else if (lParam == (LPARAM)ctls[Status]) {
 			PrintFocusData();
@@ -532,9 +539,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		UpdateFocusData();
 		SendMessage(hWnd, WM_PAINT, 0, 0);
-		RECT z;
-		GetClientRect(hWnd, &z);
-		InvalidateRect(hWnd, &z, TRUE);
 	}
 	break;
 
