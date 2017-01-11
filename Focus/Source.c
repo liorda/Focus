@@ -3,6 +3,9 @@
 #include <string.h>
 #include <tchar.h>
 
+//////////////////////////////////////////////// defines
+#define kMaxIntervalNameLength 1000
+
 //////////////////////////////////////////////// Global variables
 
 // The main window class name.
@@ -228,14 +231,18 @@ static void UpdateFocusData()
 	}
 }
 
+
 static void StartNewInterval()
 {
 	GetLocalTime(&s_time);
 	addSec(&s_time, s_intervalSec);
 	static i = 0;
-	char* v = (char*)malloc(10);
-	(void*)_itoa_s(i++, v, 10, 10);
-	list_Add(&s_NamedIntervals, v);
+	static char buff[kMaxIntervalNameLength] = { 0 };
+	if (_itoa_s(i++, buff, kMaxIntervalNameLength, 10) == 0)
+	{
+		char* v = _strdup(buff);
+		list_Add(&s_NamedIntervals, v);
+	}
 }
 
 static void UpdateControls()
@@ -522,7 +529,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		else if (lParam == (LPARAM)ctls[Reset]) {
 			StartNewInterval();
-			SendMessage(hWnd, WM_TIMER, NULL, NULL);
+			SendMessage(hWnd, WM_TIMER, (WPARAM)0, (LPARAM)0);
 			//SendMessage(hWnd, WM_COMMAND, 0, (LPARAM)ctls[Status]);
 			//InvalidateRect(hWnd, NULL, TRUE);
 			//UpdateWindow(hWnd);
