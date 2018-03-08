@@ -11,8 +11,11 @@
 // The main window class name.
 static TCHAR szWindowClass[] = _T("win32app");
 
-//static int s_intervalSec = 20 * 60; // 20min
-static int s_intervalSec = 10; // 20min
+static int s_intervalSec = 20 * 60; // 20min
+//static int s_intervalSec = 5;
+
+// reducing this value will accent the flicker problem
+static int msRefreshRate = 990;
 
 static SYSTEMTIME s_time;
 
@@ -48,7 +51,6 @@ HBRUSH brshs[BRUSHES_COUNT] = { 0 };
 ///////////////////////////////////////////////// forward decl
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-
 
 ///////////////////////////////////////////////// Hash
 
@@ -230,7 +232,6 @@ static void UpdateFocusData()
 		//GetWindowText(hWnd, p->title, size + 1);
 	}
 }
-
 
 static void StartNewInterval()
 {
@@ -493,7 +494,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	case WM_PAINT:
 	{
-		InvalidateRect(hWnd, NULL, TRUE);
+		InvalidateRect(hWnd, NULL, FALSE);
 		hdc = BeginPaint(hWnd, &ps);
 		UpdateControls();
 		RECT r;
@@ -505,6 +506,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 	break;
 
+	case WM_ERASEBKGND:
+	{
+		return TRUE;
+	}
+	break;
+
+	case WM_CTLCOLOREDIT:
 	case WM_CTLCOLORSTATIC:
 	{
 		HDC hdcStatic = (HDC)wParam;
@@ -578,7 +586,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		nCmdShow);
 	UpdateWindow(ctls[Parent]);
 
-	SetTimer(ctls[Parent], (UINT_PTR)NULL, 1000, NULL);
+	SetTimer(ctls[Parent], (UINT_PTR)NULL, msRefreshRate, NULL);
 
 	// Main message loop:
 	MSG msg;
